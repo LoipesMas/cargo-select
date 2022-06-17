@@ -7,6 +7,8 @@ use flexi_logger::Logger;
 mod cli;
 use cli::Cli;
 
+mod tui;
+
 mod select;
 
 //TODO: TUI like fzf

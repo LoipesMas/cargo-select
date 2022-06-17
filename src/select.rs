@@ -49,8 +49,7 @@ impl Target {
         }
     }
     pub fn fuzzy_match(&self, pattern: &str, skim: &SkimMatcherV2) -> i64 {
-        skim.fuzzy_match(&self.name, pattern).unwrap_or(-1)
-            + skim.fuzzy_match(&self.path, pattern).unwrap_or(-1)
+        skim.fuzzy_match(&self.to_string(), pattern).unwrap_or(-1)
     }
 }
 
@@ -89,18 +88,11 @@ pub fn targets_from_manifest(manifest: &Manifest, path: &Path) -> Vec<Target> {
     ret
 }
 
-pub fn print_targets(targets: &[Target]) {
-    log::trace!("Printing unscored targets.");
-    for target in targets {
-        println!("{}", target);
-    }
-}
-
 pub fn score_targets<'a>(
     targets: &'a [Target],
     pattern: &str,
     skim: &SkimMatcherV2,
-) -> Vec<(&'a Target, i64)> {
+) -> Vec<&'a Target> {
     log::debug!("Scoring targets with pattern: {pattern}.");
     let mut ret = targets
         .iter()
@@ -109,7 +101,7 @@ pub fn score_targets<'a>(
         .collect::<Vec<_>>();
     ret.sort_unstable_by_key(|&(target, _score)| Reverse(&target.name));
     ret.sort_by_key(|&(_, score)| score);
-    ret
+    ret.iter().map(|&(t, _)| t).collect()
 }
 
 pub fn new_complete_manifest_from_path(path: &Path) -> Result<Manifest, Box<dyn Error>> {
