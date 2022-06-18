@@ -1,6 +1,10 @@
 use cargo_toml::{Manifest, Product};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
-use std::{cmp::Reverse, error::Error, path::Path};
+use std::{
+    cmp::Reverse,
+    error::Error,
+    path::{Path, PathBuf},
+};
 
 #[derive(Debug)]
 pub enum TargetType {
@@ -34,17 +38,21 @@ impl std::fmt::Display for TargetType {
 pub struct Target {
     pub name: String,
     pub path: String,
+    pub workspace_path: PathBuf,
     pub target_type: TargetType,
 }
 
 impl Target {
     pub fn new(product: &Product, path: &Path, target_type: TargetType) -> Self {
+        log::debug!("{:?}", path);
+        log::debug!("{:?}", product.path);
         Self {
             name: product.name.to_owned().unwrap_or_default(),
             path: path
                 .join(product.path.to_owned().unwrap_or_default())
                 .to_string_lossy()
                 .to_string(),
+            workspace_path: PathBuf::from(path),
             target_type,
         }
     }
@@ -76,8 +84,12 @@ pub fn targets_from_manifest(manifest: &Manifest, path: &Path) -> Vec<Target> {
         for member in &workspace.members {
             log::debug!("Handling workspace: {member}.");
             if let Some(member) = member.strip_suffix("/*") {
-                // new_complete_manifest_from_path for all subdirs
-                log::warn!("Unhandled member directory: {member:#?}!");
+                let path = path.join(member);
+                for dir in only_dir_names(&mut std::fs::read_dir(&path).unwrap()) {
+                    let path = path.join(dir);
+                    let manifest = new_complete_manifest_from_path(&path).unwrap();
+                    ret.append(&mut targets_from_manifest(&manifest, &path));
+                }
             } else {
                 let member_path = &path.join(member);
                 let manifest = new_complete_manifest_from_path(member_path).unwrap();
@@ -86,6 +98,23 @@ pub fn targets_from_manifest(manifest: &Manifest, path: &Path) -> Vec<Target> {
         }
     }
     ret
+}
+
+fn only_dir_names(dir: &mut std::fs::ReadDir) -> Vec<String> {
+    dir.flatten()
+        .filter_map(|e| {
+            e.file_type()
+                .map(|f| {
+                    if f.is_dir() {
+                        Some(e.file_name().to_string_lossy().to_string())
+                    } else {
+                        None
+                    }
+                })
+                .ok()
+                .flatten()
+        })
+        .collect::<Vec<_>>()
 }
 
 pub fn score_targets<'a>(
@@ -106,7 +135,8 @@ pub fn score_targets<'a>(
 
 pub fn new_complete_manifest_from_path(path: &Path) -> Result<Manifest, Box<dyn Error>> {
     log::info!("Getting complete manifest from path: {path:?}");
-    let mut manifest = Manifest::from_path(path.join("Cargo.toml"))?;
-    manifest.complete_from_path(Path::new("."))?;
+    let path = path.join("Cargo.toml");
+    let mut manifest = Manifest::from_path(&path)?;
+    manifest.complete_from_path(&path)?;
     Ok(manifest)
 }

@@ -38,21 +38,25 @@ impl Cli {
         match command.cargo_command.as_deref() {
             Some("run") | Some("r") => {
                 let target = scored_targets.last().ok_or("No targets")?;
-                log::info!("Selected target: {} ({})", target.name, target.target_type);
+                log::info!("Selected target: {target}.");
                 println!("Selected target: {} ({})", target.name, target.target_type);
                 log::debug!("Creating cargo command.");
                 let mut proc_command = std::process::Command::new("cargo");
                 proc_command
+                    .current_dir(&target.workspace_path)
                     .arg("run")
                     .arg(target.target_type.to_cargo_flag())
                     .arg(&target.name)
                     .args(&command.cargo_args);
 
-                log::info!("Spawning cargo command: {proc_command:?}");
+                log::info!(
+                    "Spawning cargo command: {proc_command:?} in {:#?}",
+                    target.workspace_path
+                );
                 proc_command.spawn()?.wait()?;
             }
             _ => {
-                log::info!("No command provided, printing out scored targets");
+                log::info!("No command provided, printing out matched target.");
                 let target = scored_targets.last().ok_or("No targets")?;
                 println!("{}", target);
             }
