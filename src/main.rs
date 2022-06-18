@@ -15,8 +15,6 @@ mod logging;
 mod select;
 mod tui;
 
-//TODO: select tests?
-
 fn init_logger(logger: LogVec) {
     Logger::try_with_env_or_str("warn")
         .unwrap()

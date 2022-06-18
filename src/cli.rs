@@ -77,7 +77,6 @@ pub struct SelectCommand {
     pub cargo_command: Option<String>,
     #[clap(value_parser)]
     pub pattern: Option<String>,
-    // TODO: make it a "last" argument, i.e. after "--"
     #[clap(value_parser)]
     pub cargo_args: Vec<String>,
 }
