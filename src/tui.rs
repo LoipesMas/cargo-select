@@ -55,13 +55,14 @@ impl Tui {
                     return Err("User interrupt.".into());
                 }
                 if matches!(key.code, KeyCode::Char('w'))
-                    && key.modifiers.contains(KeyModifiers::CONTROL) {
-                        // delete last word
-                        let mut p = pattern.pop();
-                        while !matches!(p, Some(' ') | None){ 
-                            p = pattern.pop();
-                        }
-                        continue;
+                    && key.modifiers.contains(KeyModifiers::CONTROL)
+                {
+                    // delete last word
+                    let mut p = pattern.pop();
+                    while !matches!(p, Some(' ') | None) {
+                        p = pattern.pop();
+                    }
+                    continue;
                 }
                 match key.code {
                     KeyCode::Char(c) => pattern.push(c),
