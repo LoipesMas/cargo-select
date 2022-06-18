@@ -18,3 +18,13 @@ OPTIONS:
     -h, --help    Print help information
 ```
 `cargo select run` is special-cased to `cargo run` with `--package NAME` or `--example NAME`
+
+## Installation
+### From crates.io
+`cargo install cargo-select`
+### From source
+```
+git clone https://github.com/LoipesMas/cargo-select.git
+cd cargo-select
+cargo install --path .
+```
