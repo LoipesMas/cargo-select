@@ -2,6 +2,10 @@
 name = "cargo-select"
 version = "0.1.0"
 edition = "2021"
+authors = ["LoipesMas"]
+description = "Cargo subcommand to easily run targets/examples"
+repository = "https://github.com/LoipesMas/cargo-select"
+license = "GPL-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,6 +14,6 @@ clap = {version = "3.2.4", features = ["derive"]}
 cargo_toml = "0.11.5"
 fuzzy-matcher = "0.3.7"
 flexi_logger = "0.22.3"
-log = "*"
+log = "0.4"
 tui = "0.18.0"
 crossterm = "0.23"
