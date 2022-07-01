@@ -37,10 +37,22 @@ fn get_tests_from_file(dir_entry: &DirEntry) -> Vec<Target> {
         if line == "#[test]" {
             find_test_function = true;
         } else if find_test_function {
-            //TODO: handle more keywords
-            if let Some(line) = line.strip_prefix("fn") {
+            //TODO: this still can miss things like:
+            // ```
+            // #[test]
+            // fn
+            // foo
+            // ()
+            // {}
+            // ```
+            if let Some(line) = line
+                .strip_prefix("fn")
+                .or_else(|| line.strip_prefix("pub fn"))
+            {
                 // get just the name of the function
-                let i = line.find('(').expect("whaa");
+                let i = line
+                    .find('(')
+                    .unwrap_or_else(|| line.len().saturating_sub(1));
                 let name = line[..i].trim().to_owned();
 
                 log::trace!("Found test: {name}");
