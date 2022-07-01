@@ -39,6 +39,8 @@ pub struct SelectCommand {
     pub pattern: Option<String>,
     #[clap(value_parser, help = "Additional arguments to pass to cargo.")]
     pub cargo_args: Vec<String>,
+    #[clap(value_parser, long="no-skip")]
+    pub no_skip: bool,
 }
 impl Cli {
     pub fn exec(mut self) -> Result<(), Box<dyn Error>> {
@@ -89,21 +91,39 @@ impl Cli {
                 proc_command.spawn()?.wait()?;
             }
             Some("t") | Some("test") => {
-                //TODO: --skip other tests that could potentially match
                 let target = scored_targets.last().ok_or("No targets")?;
-                log::info!("Selected target: {target}.");
-                println!("Selected target: {}", target);
-                log::debug!("Creating cargo command.");
-                let mut proc_command = std::process::Command::new("cargo");
                 let (name, workspace_path) = match target {
                     Target::Test(t) => (&t.name, &t.path),
                     _ => unreachable!("You can only get tests with `test` command."),
                 };
+                let to_skip = targets.iter().filter_map(|t| {
+                    if let Target::Test(t) = t {
+                        if &t.name != name && t.name.contains(name) {
+                            Some(["--skip", &t.name])
+                        }
+                        else {
+                            None
+                        }
+                    }
+                    else {
+                        unreachable!("You can only get tests with `test` command.")
+                    }
+                }).flatten();
+                log::info!("Selected target: {target}.");
+                println!("Selected target: {}", target);
+                log::debug!("Creating cargo command.");
+                let mut proc_command = std::process::Command::new("cargo");
                 proc_command
                     .current_dir(&workspace_path.parent().unwrap())
                     .arg("test")
                     .arg(name)
                     .args(&command.cargo_args);
+
+                if !command.no_skip {
+                    proc_command
+                        .arg("--")
+                        .args(to_skip);
+                }
 
                 log::info!(
                     "Spawning cargo command: {proc_command:?} in {:#?}",
