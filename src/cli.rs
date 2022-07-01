@@ -39,7 +39,7 @@ pub struct SelectCommand {
     pub pattern: Option<String>,
     #[clap(value_parser, help = "Additional arguments to pass to cargo.")]
     pub cargo_args: Vec<String>,
-    #[clap(value_parser, long="no-skip")]
+    #[clap(value_parser, long="no-skip", help = "Run all tests that match selected test (i.e. dont skip names that are supersets)(tests only)")]
     pub no_skip: bool,
 }
 impl Cli {
