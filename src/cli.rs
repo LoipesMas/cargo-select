@@ -3,6 +3,7 @@ use std::{error::Error, path::Path};
 use clap::{Args, Parser, Subcommand};
 use fuzzy_matcher::skim::SkimMatcherV2;
 
+use crate::get_tests::get_tests_from_path;
 use crate::tui::Tui;
 
 use crate::select::{
@@ -43,7 +44,11 @@ impl Cli {
     pub fn exec(mut self) -> Result<(), Box<dyn Error>> {
         let Commands::SelectCommand(ref mut command) = self.command;
         let manifest = new_complete_manifest_from_path(Path::new("."))?;
-        let targets = targets_from_manifest(&manifest, Path::new("."));
+        let targets = if matches!(command.cargo_command.as_deref(), Some("t") | Some("test")) {
+            get_tests_from_path(Path::new("."))
+        } else {
+            targets_from_manifest(&manifest, Path::new("."))
+        };
         let pattern = match command.pattern.take() {
             Some(pattern) => pattern,
             None => Tui::launch(&targets)?,
@@ -62,19 +67,47 @@ impl Cli {
             Some("run") | Some("r") => {
                 let target = scored_targets.last().ok_or("No targets")?;
                 log::info!("Selected target: {target}.");
-                println!("Selected target: {} ({})", target.name, target.target_type);
+                println!("Selected target: {}", target);
                 log::debug!("Creating cargo command.");
                 let mut proc_command = std::process::Command::new("cargo");
+                let (name, workspace_path) = match target {
+                    Target::Bin(t) => (&t.name, &t.workspace_path),
+                    Target::Example(t) => (&t.name, &t.workspace_path),
+                    Target::Test(_) => unreachable!("You can't get test with `run` command."),
+                };
                 proc_command
-                    .current_dir(&target.workspace_path)
+                    .current_dir(&workspace_path)
                     .arg("run")
-                    .arg(target.target_type.to_cargo_flag())
-                    .arg(&target.name)
+                    .arg(target.to_cargo_flag())
+                    .arg(name)
                     .args(&command.cargo_args);
 
                 log::info!(
                     "Spawning cargo command: {proc_command:?} in {:#?}",
-                    target.workspace_path
+                    workspace_path
+                );
+                proc_command.spawn()?.wait()?;
+            }
+            Some("t") | Some("test") => {
+                //TODO: --skip other tests that could potentially match
+                let target = scored_targets.last().ok_or("No targets")?;
+                log::info!("Selected target: {target}.");
+                println!("Selected target: {}", target);
+                log::debug!("Creating cargo command.");
+                let mut proc_command = std::process::Command::new("cargo");
+                let (name, workspace_path) = match target {
+                    Target::Test(t) => (&t.name, &t.path),
+                    _ => unreachable!("You can only get tests with `test` command."),
+                };
+                proc_command
+                    .current_dir(&workspace_path.parent().unwrap())
+                    .arg("test")
+                    .arg(name)
+                    .args(&command.cargo_args);
+
+                log::info!(
+                    "Spawning cargo command: {proc_command:?} in {:#?}",
+                    workspace_path
                 );
                 proc_command.spawn()?.wait()?;
             }

@@ -7,43 +7,49 @@ use std::{
 };
 
 #[derive(Debug)]
-pub enum TargetType {
-    Bin,
-    Example,
+pub enum Target {
+    Bin(RunTarget),
+    Example(RunTarget),
+    Test(TestTarget),
 }
 
-impl TargetType {
+impl Target {
     pub fn to_cargo_flag(&self) -> &'static str {
         match self {
-            TargetType::Bin => "--package",
-            TargetType::Example => "--example",
+            Target::Bin(_) => "--package",
+            Target::Example(_) => "--example",
+            Target::Test(_) => panic!("No cargo flag for test!"),
         }
+    }
+
+    pub fn fuzzy_match(&self, pattern: &str, skim: &SkimMatcherV2) -> i64 {
+        skim.fuzzy_match(&self.to_string(), pattern).unwrap_or(-1)
     }
 }
 
-impl std::fmt::Display for TargetType {
+impl std::fmt::Display for Target {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}",
             match self {
-                TargetType::Bin => "Binary",
-                TargetType::Example => "Example",
+                Target::Bin(t) => format!("Binary: {}", t),
+                Target::Example(t) => format!("Example: {}", t),
+                Target::Test(t) => format!("Test: {}", t),
             }
         )
     }
 }
 
 #[derive(Debug)]
-pub struct Target {
+pub struct RunTarget {
     pub name: String,
     pub path: String,
     pub workspace_path: PathBuf,
-    pub target_type: TargetType,
 }
 
-impl Target {
-    pub fn new(product: &Product, path: &Path, target_type: TargetType) -> Self {
+impl RunTarget {
+    pub fn new(product: &Product, path: &Path) -> Self {
         log::debug!("{:?}", path);
         log::debug!("{:?}", product.path);
         Self {
@@ -53,17 +59,25 @@ impl Target {
                 .to_string_lossy()
                 .to_string(),
             workspace_path: PathBuf::from(path),
-            target_type,
         }
-    }
-    pub fn fuzzy_match(&self, pattern: &str, skim: &SkimMatcherV2) -> i64 {
-        skim.fuzzy_match(&self.to_string(), pattern).unwrap_or(-1)
     }
 }
 
-impl std::fmt::Display for Target {
+impl std::fmt::Display for RunTarget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {:30}\t({})", self.target_type, self.name, self.path)
+        write!(f, "{:30}\t({})", self.name, self.path)
+    }
+}
+
+#[derive(Debug)]
+pub struct TestTarget {
+    pub name: String,
+    pub path: PathBuf,
+}
+
+impl std::fmt::Display for TestTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:30}\t({})", self.name, self.path.to_str().unwrap())
     }
 }
 
@@ -71,12 +85,12 @@ pub fn targets_from_manifest(manifest: &Manifest, path: &Path) -> Vec<Target> {
     log::debug!("Getting targets from manifest.");
     let mut ret = vec![];
     for bin in &manifest.bin {
-        let target = Target::new(bin, path, TargetType::Bin);
+        let target = Target::Bin(RunTarget::new(bin, path));
         log::debug!("Adding target: {}", target);
         ret.push(target);
     }
     for example in manifest.example.iter() {
-        let target = Target::new(example, path, TargetType::Example);
+        let target = Target::Example(RunTarget::new(example, path));
         log::debug!("Adding target: {}", target);
         ret.push(target);
     }
@@ -128,7 +142,9 @@ pub fn score_targets<'a>(
         .map(|target| (target, target.fuzzy_match(pattern, skim)))
         .filter(|&(_target, score)| score > 0)
         .collect::<Vec<_>>();
-    ret.sort_unstable_by_key(|&(target, _score)| Reverse(&target.name));
+
+    //TODO: maybe change this?
+    ret.sort_unstable_by_key(|&(target, _score)| Reverse(target.to_string()));
     ret.sort_by_key(|&(_, score)| score);
     ret.iter().map(|&(t, _)| t).collect()
 }

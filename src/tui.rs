@@ -79,26 +79,28 @@ impl Tui {
     fn ui<B: Backend>(frame: &mut Frame<B>, targets: &[Target], pattern: &str) {
         let skim = SkimMatcherV2::default();
 
-        let items = if !pattern.is_empty() {
-            (score_targets(targets, pattern, &skim)
-                .iter()
-                .map(|t| ListItem::new(t.to_string())))
-            .collect::<Vec<_>>()
+        let targets = if !pattern.is_empty() {
+            score_targets(targets, pattern, &skim)
         } else {
-            targets
-                .iter()
-                .map(|t| ListItem::new(t.to_string()))
-                .collect::<Vec<_>>()
+            targets.iter().collect()
         };
 
-        let padding = (frame.size().height - 2).saturating_sub(items.len() as u16);
+        let items = targets
+            .windows(frame.size().height.saturating_sub(1).into())
+            .last()
+            .unwrap_or(&targets)
+            .iter()
+            .map(|t| ListItem::new(t.to_string()))
+            .collect::<Vec<_>>();
+
+        let padding = (frame.size().height - 1).saturating_sub(items.len() as u16);
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints(
                 [
                     Constraint::Length(padding),
-                    Constraint::Min(1),
+                    Constraint::Min(0),
                     Constraint::Length(1),
                 ]
                 .as_ref(),

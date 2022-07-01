@@ -11,6 +11,7 @@ mod cli;
 use cli::Cli;
 use logging::LogVec;
 
+mod get_tests;
 mod logging;
 mod select;
 mod tui;
