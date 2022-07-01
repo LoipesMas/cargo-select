@@ -5,17 +5,40 @@ use fuzzy_matcher::skim::SkimMatcherV2;
 
 use crate::tui::Tui;
 
+use crate::select::{
+    new_complete_manifest_from_path, score_targets, targets_from_manifest, Target,
+};
+
 #[derive(Parser, Debug)]
-#[clap(bin_name = "cargo")]
+#[clap(bin_name = "cargo", version, author)]
 pub struct Cli {
     #[clap(subcommand)]
     pub command: Commands,
 }
 
-use crate::select::{
-    new_complete_manifest_from_path, score_targets, targets_from_manifest, Target,
-};
+#[derive(Subcommand, Debug)]
+pub enum Commands {
+    #[clap(name = "select")]
+    SelectCommand(SelectCommand),
+}
 
+/// Fuzzy-match targets/examples
+#[derive(Args, Debug)]
+#[clap(version, author)]
+pub struct SelectCommand {
+    #[clap(
+        value_parser,
+        help = "Cargo command to run with selected target (e.g. \"run\")."
+    )]
+    pub cargo_command: Option<String>,
+    #[clap(
+        value_parser,
+        help = "Pattern to fuzzy-match targets with. Omit for interactive mode."
+    )]
+    pub pattern: Option<String>,
+    #[clap(value_parser, help = "Additional arguments to pass to cargo.")]
+    pub cargo_args: Vec<String>,
+}
 impl Cli {
     pub fn exec(mut self) -> Result<(), Box<dyn Error>> {
         let Commands::SelectCommand(ref mut command) = self.command;
@@ -63,20 +86,4 @@ impl Cli {
         };
         Ok(())
     }
-}
-
-#[derive(Subcommand, Debug)]
-pub enum Commands {
-    #[clap(name = "select")]
-    SelectCommand(SelectCommand),
-}
-
-#[derive(Args, Debug)]
-pub struct SelectCommand {
-    #[clap(value_parser)]
-    pub cargo_command: Option<String>,
-    #[clap(value_parser)]
-    pub pattern: Option<String>,
-    #[clap(value_parser)]
-    pub cargo_args: Vec<String>,
 }
