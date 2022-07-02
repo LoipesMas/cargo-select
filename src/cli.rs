@@ -39,7 +39,11 @@ pub struct SelectCommand {
     pub pattern: Option<String>,
     #[clap(value_parser, help = "Additional arguments to pass to cargo.")]
     pub cargo_args: Vec<String>,
-    #[clap(value_parser, long="no-skip", help = "Run all tests that match selected test (i.e. dont skip names that are supersets)(tests only)")]
+    #[clap(
+        value_parser,
+        long = "no-skip",
+        help = "Run all tests that match selected test (i.e. dont skip names that are supersets)(tests only)"
+    )]
     pub no_skip: bool,
 }
 impl Cli {
@@ -51,28 +55,28 @@ impl Cli {
         } else {
             targets_from_manifest(&manifest, Path::new("."))
         };
-        let pattern = match command.pattern.take() {
-            Some(pattern) => pattern,
+        let selected_target = match command.pattern.take() {
+            Some(pattern) => score_targets(&targets, &pattern, &SkimMatcherV2::default())
+                .last()
+                .ok_or("No targets matched!")?,
             None => Tui::launch(&targets)?,
         };
-        self.do_stuff_with_targets(&targets, &pattern)
+        self.do_stuff_with_targets(&targets, selected_target)
     }
 
     fn do_stuff_with_targets(
         &self,
         targets: &[Target],
-        pattern: &str,
+        selected_target: &Target,
     ) -> Result<(), Box<dyn Error>> {
         let Commands::SelectCommand(command) = &self.command;
-        let scored_targets = score_targets(targets, pattern, &SkimMatcherV2::default());
         match command.cargo_command.as_deref() {
             Some("run") | Some("r") => {
-                let target = scored_targets.last().ok_or("No targets")?;
-                log::info!("Selected target: {target}.");
-                println!("Selected target: {}", target);
+                log::info!("Selected target: {selected_target}.");
+                println!("Selected target: {selected_target}");
                 log::debug!("Creating cargo command.");
                 let mut proc_command = std::process::Command::new("cargo");
-                let (name, workspace_path) = match target {
+                let (name, workspace_path) = match selected_target {
                     Target::Bin(t) => (&t.name, &t.workspace_path),
                     Target::Example(t) => (&t.name, &t.workspace_path),
                     Target::Test(_) => unreachable!("You can't get test with `run` command."),
@@ -80,7 +84,7 @@ impl Cli {
                 proc_command
                     .current_dir(&workspace_path)
                     .arg("run")
-                    .arg(target.to_cargo_flag())
+                    .arg(selected_target.to_cargo_flag())
                     .arg(name)
                     .args(&command.cargo_args);
 
@@ -91,26 +95,26 @@ impl Cli {
                 proc_command.spawn()?.wait()?;
             }
             Some("t") | Some("test") => {
-                let target = scored_targets.last().ok_or("No targets")?;
-                let (name, workspace_path) = match target {
+                let (name, workspace_path) = match selected_target {
                     Target::Test(t) => (&t.name, &t.path),
                     _ => unreachable!("You can only get tests with `test` command."),
                 };
-                let to_skip = targets.iter().filter_map(|t| {
-                    if let Target::Test(t) = t {
-                        if &t.name != name && t.name.contains(name) {
-                            Some(["--skip", &t.name])
+                let to_skip = targets
+                    .iter()
+                    .filter_map(|t| {
+                        if let Target::Test(t) = t {
+                            if &t.name != name && t.name.contains(name) {
+                                Some(["--skip", &t.name])
+                            } else {
+                                None
+                            }
+                        } else {
+                            unreachable!("You can only get tests with `test` command.")
                         }
-                        else {
-                            None
-                        }
-                    }
-                    else {
-                        unreachable!("You can only get tests with `test` command.")
-                    }
-                }).flatten();
-                log::info!("Selected target: {target}.");
-                println!("Selected target: {}", target);
+                    })
+                    .flatten();
+                log::info!("Selected target: {selected_target}.");
+                println!("Selected target: {selected_target}");
                 log::debug!("Creating cargo command.");
                 let mut proc_command = std::process::Command::new("cargo");
                 proc_command
@@ -120,9 +124,7 @@ impl Cli {
                     .args(&command.cargo_args);
 
                 if !command.no_skip {
-                    proc_command
-                        .arg("--")
-                        .args(to_skip);
+                    proc_command.arg("--").args(to_skip);
                 }
 
                 log::info!(
@@ -133,8 +135,7 @@ impl Cli {
             }
             _ => {
                 log::info!("No command provided, printing out matched target.");
-                let target = scored_targets.last().ok_or("No targets")?;
-                println!("{}", target);
+                println!("{}", selected_target);
             }
         };
         Ok(())

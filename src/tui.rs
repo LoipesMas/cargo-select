@@ -11,14 +11,14 @@ use tui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout},
     style::{Color, Style},
-    widgets::{Block, List, ListItem, Paragraph},
+    widgets::{Block, List, ListItem, ListState, Paragraph},
     Frame, Terminal,
 };
 
 pub struct Tui;
 
 impl Tui {
-    pub fn launch(targets: &[Target]) -> Result<String, Box<dyn Error>> {
+    pub fn launch(targets: &[Target]) -> Result<&Target, Box<dyn Error>> {
         // setup terminal
         enable_raw_mode()?;
         let mut stdout = io::stdout();
@@ -39,13 +39,33 @@ impl Tui {
         res
     }
 
-    fn main_loop<B: Backend>(
+    fn main_loop<'a, B: Backend>(
         terminal: &mut Terminal<B>,
-        targets: &[Target],
-    ) -> Result<String, Box<dyn Error>> {
+        targets: &'a [Target],
+    ) -> Result<&'a Target, Box<dyn Error>> {
         let mut pattern = String::new();
+        let mut list_state = ListState::default();
+        let mut selected_idx = 0;
+        let skim = SkimMatcherV2::default();
         loop {
-            terminal.draw(|f| Tui::ui(f, targets, &pattern))?;
+            let terminal_height: usize = terminal.size().unwrap().height.into();
+
+            let targets = if !pattern.is_empty() {
+                score_targets(targets, &pattern, &skim)
+            } else {
+                targets.iter().collect()
+            };
+
+            let targets = targets
+                .windows(terminal_height.saturating_sub(1))
+                .last()
+                .unwrap_or(&targets)
+                .to_vec();
+
+            selected_idx = selected_idx.min(targets.len()).max(1);
+            let transformed_idx = targets.len().saturating_sub(selected_idx);
+            list_state.select(Some(transformed_idx));
+            terminal.draw(|f| Tui::ui(f, &targets, &pattern, &mut list_state))?;
 
             if let Event::Key(key) = crossterm::event::read()? {
                 if (matches!(key.code, KeyCode::Char('c'))
@@ -69,26 +89,31 @@ impl Tui {
                     KeyCode::Backspace => {
                         pattern.pop();
                     }
-                    KeyCode::Enter => return Ok(pattern),
+                    KeyCode::Up => selected_idx += 1,
+                    KeyCode::Down => selected_idx = selected_idx.saturating_sub(1),
+                    KeyCode::Enter => {
+                        if targets.is_empty() {
+                            return Err("No targets matched!".into());
+                        } else {
+                            return Ok(targets[transformed_idx.min(targets.len() - 1)]);
+                        }
+                    }
                     _ => {}
                 };
             }
         }
     }
 
-    fn ui<B: Backend>(frame: &mut Frame<B>, targets: &[Target], pattern: &str) {
-        let skim = SkimMatcherV2::default();
-
-        let targets = if !pattern.is_empty() {
-            score_targets(targets, pattern, &skim)
-        } else {
-            targets.iter().collect()
-        };
-
+    fn ui<B: Backend>(
+        frame: &mut Frame<B>,
+        targets: &[&Target],
+        pattern: &str,
+        list_state: &mut ListState,
+    ) {
         let items = targets
             .windows(frame.size().height.saturating_sub(1).into())
             .last()
-            .unwrap_or(&targets)
+            .unwrap_or(targets)
             .iter()
             .map(|t| ListItem::new(t.to_string()))
             .collect::<Vec<_>>();
@@ -107,8 +132,8 @@ impl Tui {
             )
             .split(frame.size());
 
-        let items = List::new(items);
-        frame.render_widget(items, chunks[1]);
+        let items = List::new(items).highlight_style(Style::default().bg(Color::DarkGray));
+        frame.render_stateful_widget(items, chunks[1], list_state);
         let input = Paragraph::new(pattern)
             .block(Block::default().style(Style::default().bg(Color::DarkGray)));
         frame.set_cursor(chunks[2].x + pattern.len() as u16, chunks[2].y);
