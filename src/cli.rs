@@ -79,7 +79,7 @@ impl Cli {
                 let (name, workspace_path) = match selected_target {
                     Target::Bin(t) => (&t.name, &t.workspace_path),
                     Target::Example(t) => (&t.name, &t.workspace_path),
-                    Target::Test(_) => unreachable!("You can't get test with `run` command."),
+                    Target::Test(_) => unreachable!("You can only get tests with `test` command."),
                 };
                 proc_command
                     .current_dir(&workspace_path)
@@ -133,7 +133,30 @@ impl Cli {
                 );
                 proc_command.spawn()?.wait()?;
             }
-            _ => {
+            Some(c) => {
+                log::info!("Selected target: {selected_target}.");
+                println!("Selected target: {selected_target}");
+                log::debug!("Creating cargo command.");
+                let mut proc_command = std::process::Command::new("cargo");
+                let (name, workspace_path) = match selected_target {
+                    Target::Bin(t) => (&t.name, &t.workspace_path),
+                    Target::Example(t) => (&t.name, &t.workspace_path),
+                    Target::Test(_) => unreachable!("You can only get tests with `test` command."),
+                };
+                proc_command
+                    .current_dir(&workspace_path)
+                    .arg(c)
+                    .arg(selected_target.to_cargo_flag())
+                    .arg(name)
+                    .args(&command.cargo_args);
+
+                log::info!(
+                    "Spawning cargo command: {proc_command:?} in {:#?}",
+                    workspace_path
+                );
+                proc_command.spawn()?.wait()?;
+            }
+            None => {
                 log::info!("No command provided, printing out matched target.");
                 println!("{}", selected_target);
             }
