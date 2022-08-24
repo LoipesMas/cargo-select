@@ -96,6 +96,10 @@ pub fn targets_from_manifest(manifest: &Manifest, path: &Path) -> Vec<Target> {
     }
     if let Some(workspace) = &manifest.workspace {
         for member in &workspace.members {
+            // Prevent loops
+            if member == "." || member == "/." {
+                continue;
+            }
             log::debug!("Handling workspace: {member}.");
             if let Some(member) = member.strip_suffix("/*") {
                 let path = path.join(member);
